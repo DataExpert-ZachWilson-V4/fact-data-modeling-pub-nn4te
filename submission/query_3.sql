@@ -47,7 +47,7 @@ user_devices_deduped AS (
         user_devices_row_num 
     WHERE row_num = 1
 ),
-yesterday AS (
+last_year AS (
   SELECT
     user_id,
     dates_active,
@@ -57,7 +57,7 @@ yesterday AS (
   WHERE
     date = DATE('2021-01-01')
 ),
-today AS (
+current_year AS (
   SELECT
     user_id,
     map(array_agg(browser_type), array_agg(ARRAY[date])) AS dates_active,
@@ -75,14 +75,14 @@ SELECT
   CASE
     WHEN y.dates_active IS NOT NULL 
       THEN COALESCE(
-        MAP_ZIP_WITH(t.dates_active,y.dates_active,(k,a,b) -> a || b),
+        MAP_ZIP_WITH(t.dates_active,y.dates_active,(k,a,b) -> COALESCE(a || b, ARRAY[DATE(NULL)] || b)),
         MAP_ZIP_WITH(
           map(
             map_keys(y.dates_active),
             map_values(transform_values(y.dates_active, (k,v) -> ARRAY[DATE(NULL)]))
           ),
           y.dates_active,
-          (k,a,b) -> a || b
+          (k,a,b) -> COALESCE(a || b, ARRAY[DATE(NULL)] || b)
         )
       )
     ELSE 
@@ -90,5 +90,6 @@ SELECT
   END AS dates_active,
   DATE('2021-01-02') AS date
 FROM
-  yesterday y
-  FULL OUTER JOIN today t ON y.user_id = t.user_id
+  last_year y
+  FULL OUTER JOIN current_year t ON y.user_id = t.user_id
+  -- Checkout failure case: -357822652
